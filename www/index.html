@@ -1,11 +1,36 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8">
-    <title>Hello wasm-pack!</title>
-  </head>
-  <body>
-    <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
-    <script src="./bootstrap.js"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <title>POV demo camera unlocker</title>
+  <style>
+    input[disabled] {
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+<noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+<script src="./bootstrap.js"></script>
+<h1>POV demo camera unlocker</h1>
+
+Unlocks the camera in POV demos to allow the same controls as when viewing STV demos.
+
+<p>Select a demo file below to begin processing, once processed the file will be presented as download</p>
+<p>Processing demo files can take a while</p>
+<form>
+  <input type="number" id="start" value="30000">
+  <input type="number" id="end" value="50000">
+  <input type="file" id="file">
+</form>
+
+<p>
+  Note:
+</p>
+<ul>
+  <li>The demo still being recorded as POV demo means that only data around the recording player is in the demo file, players not near the recorder will behave weirdly</li>
+  <li>When the player respawns the freecam camera will be moved</li>
+  <li>The resulting demo might not work or crash tf2 on playback in rare cases</li>
+</ul>
+</body>
 </html>
