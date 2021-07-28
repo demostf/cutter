@@ -7,7 +7,10 @@ use crate::entity::ActiveEntities;
 use crate::utils::set_panic_hook;
 use bitbuffer::{BitRead, BitWrite, BitWriteStream, LittleEndian};
 use std::cmp::{max, min};
+use std::convert::TryInto;
+use std::iter::once;
 use tf_demo_parser::demo::header::Header;
+use tf_demo_parser::demo::message::packetentities::PacketEntitiesMessage;
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
 use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
@@ -64,12 +67,27 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             handler.handle_packet(packet).unwrap();
         }
 
+        let mut next = packets.next(&start_handler.state_handler).unwrap().unwrap();
+        let mut delta_tick = 0;
+        if let Packet::Message(MessagePacket { messages, .. }) = &next {
+            for msg in messages {
+                if let Message::PacketEntities(PacketEntitiesMessage {
+                    delta: Some(delta), ..
+                }) = msg
+                {
+                    delta_tick = delta.get();
+                }
+            }
+        } else {
+            panic!("first packet is not a MessagePacket")
+        }
+
         let msg = entities.encode();
         let packet = Packet::Message(MessagePacket {
             tick: 0,
             messages: vec![
                 Message::NetTick(NetTickMessage {
-                    tick: last_server_tick,
+                    tick: delta_tick,
                     frame_time: 1881,
                     std_dev: 263,
                 }),
@@ -87,10 +105,53 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             .unwrap();
         handler.handle_packet(packet).unwrap();
 
+        // create the net ticks needed for later deltas
+        let fill_ticks = ((delta_tick + 1)..=last_server_tick)
+            .into_iter()
+            .map(|tick| {
+                Message::NetTick(NetTickMessage {
+                    tick,
+                    frame_time: 1881,
+                    std_dev: 263,
+                })
+            });
+        let fill_packets = fill_ticks.map(|msg| {
+            Packet::Message(MessagePacket {
+                tick: 0,
+                messages: vec![
+                    msg,
+                    Message::PacketEntities(PacketEntitiesMessage {
+                        entities: vec![],
+                        removed_entities: vec![],
+                        max_entries: 0,
+                        delta: Some(delta_tick.try_into().unwrap()),
+                        base_line: 0,
+                        updated_base_line: false,
+                    }),
+                ],
+                meta: MessagePacketMeta {
+                    flags: 0,
+                    view_angles: Default::default(),
+                    sequence_in: 0,
+                    sequence_out: 0,
+                },
+            })
+        });
+        for packet in fill_packets {
+            packet
+                .encode(&mut out_stream, &handler.state_handler)
+                .unwrap();
+        }
+
+        next.set_tick(next.tick() - start_tick);
+        next.encode(&mut out_stream, &handler.state_handler)
+            .unwrap();
+        handler.handle_packet(next).unwrap();
+
         while let Some(mut packet) = packets.next(&handler.state_handler).unwrap() {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
-            packet.set_tick(max(original_tick, start_tick) - start_tick);
+            packet.set_tick(original_tick - start_tick);
             if ty != PacketType::ConsoleCmd {
                 packet
                     .encode(&mut out_stream, &handler.state_handler)
