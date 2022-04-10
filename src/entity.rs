@@ -15,7 +15,7 @@ pub struct ActiveEntities {
 impl ActiveEntities {
     pub fn handle_message(&mut self, msg: &PacketEntitiesMessage, state: &ParserState) {
         for entity in &msg.entities {
-            if entity.update_type == UpdateType::Delete || entity.update_type == UpdateType::Leave {
+            if entity.update_type == UpdateType::Delete {
                 self.remove_entity(entity.entity_index);
             } else {
                 self.handle_entity(entity, state);
@@ -27,11 +27,20 @@ impl ActiveEntities {
         if msg.updated_base_line {
             let old_index = msg.base_line as usize;
             let new_index = 1 - old_index;
-            self.baselines.swap(0, 1);
+
+            self.baselines[new_index] = self.baselines[old_index].clone();
 
             for entity in &msg.entities {
                 if entity.update_type == UpdateType::Enter {
-                    self.baselines[new_index].insert(entity.entity_index, entity.clone());
+                    let entity = match self.baselines[old_index].get(&entity.entity_index) {
+                        Some(baseline) if baseline.server_class == entity.server_class => {
+                            let mut baseline = baseline.clone();
+                            baseline.apply_update(&entity.props);
+                            baseline
+                        }
+                        _ => entity.clone(),
+                    };
+                    self.baselines[new_index].insert(entity.entity_index, entity);
                 }
             }
         }
@@ -47,39 +56,51 @@ impl ActiveEntities {
         self.entities
             .entry(entity.entity_index)
             .and_modify(|existing| {
-                if existing.serial_number != entity.serial_number {
+                if existing.serial_number != entity.serial_number
+                    && existing.server_class != entity.server_class
+                {
                     // todo: do baselines need to be cleanup up or updated here?
                     *existing = entity.clone();
                     existing.update_type = UpdateType::Enter;
                 } else {
-                    assert_eq!(
+                    debug_assert_eq!(
                         state.server_classes[usize::from(existing.server_class)],
                         state.server_classes[usize::from(entity.server_class)]
                     );
-                    for prop in &entity.props {
-                        match existing
-                            .props
-                            .iter_mut()
-                            .find(|existing| existing.index == prop.index)
-                        {
-                            Some(existing) => existing.value = prop.value.clone(),
-                            None => existing.props.push(prop.clone()),
-                        }
+                    if existing.serial_number != entity.serial_number {
+                        existing.serial_number = entity.serial_number;
+                        existing.update_type = UpdateType::Enter;
                     }
+                    existing.apply_update(&entity.props);
                 }
             })
             .or_insert_with(|| entity.clone());
     }
 
-    pub fn encode(self) -> impl IntoIterator<Item = PacketEntitiesMessage> {
+    pub fn encode(mut self) -> impl IntoIterator<Item = PacketEntitiesMessage> {
         let mut baselines = [
             encode_entities(self.baselines[0].clone().into_values().collect::<Vec<_>>()),
             encode_entities(self.baselines[1].clone().into_values().collect::<Vec<_>>()),
         ];
+        for entity in self.entities.values_mut() {
+            entity.update_type = UpdateType::Enter;
+        }
         let entities = encode_entities(self.entities.into_values().collect::<Vec<_>>());
 
         baselines[0].updated_base_line = true;
         baselines[0].base_line = 1; //the baseline that is updated is the other one
+        baselines[1].base_line = 0;
+
+        for ent in baselines[0]
+            .entities
+            .iter()
+            .chain(baselines[1].entities.iter())
+            .chain(entities.entities.iter())
+        {
+            if ent.entity_index == 650 {
+                // dbg!(ent.update_type, &ent.props);
+            }
+        }
 
         baselines[1].updated_base_line = true;
 

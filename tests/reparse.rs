@@ -47,6 +47,7 @@ fn test_reparse_with_analyser<A: BorrowMessageHandler + Default, F: Fn(&A::Outpu
         (original_ticks.next().unwrap(), cut_ticks.next().unwrap())
     {
         assert_eq!(original_tick.tick, cut_tick.tick + 30000);
+        // dbg!(original_tick.tick);
         let original_state = &original_tick.state;
         let cut_state = &cut_tick.state;
 
@@ -105,10 +106,13 @@ fn test_reparse_game_state() {
     })
 }
 
-// #[test]
-// fn test_reparse_entities() {
-//     test_reparse_with_analyser::<EntityDumper, _>(|original_state, cut_state| {
-//         assert_eq!(original_state.len(), cut_state.len());
-//         panic!();
-//     })
-// }
+#[test]
+fn test_reparse_entities() {
+    test_reparse_with_analyser::<EntityDumper, _>(|original_state, cut_state| {
+        assert_eq!(original_state.len(), cut_state.len());
+        for (original_entity, cut_entity) in original_state.iter().zip(cut_state) {
+            assert_eq!(original_entity.0, cut_entity.0);
+            assert_eq!(original_entity.1, cut_entity.1);
+        }
+    })
+}
