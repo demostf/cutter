@@ -46,8 +46,10 @@ fn test_reparse_with_analyser<A: BorrowMessageHandler + Default, F: Fn(&A::Outpu
     while let (Some(original_tick), Some(cut_tick)) =
         (original_ticks.next().unwrap(), cut_ticks.next().unwrap())
     {
+        if original_tick.tick >= 50000 {
+            break;
+        }
         assert_eq!(original_tick.tick, cut_tick.tick + 30000);
-        // dbg!(original_tick.tick);
         let original_state = &original_tick.state;
         let cut_state = &cut_tick.state;
 
@@ -57,11 +59,11 @@ fn test_reparse_with_analyser<A: BorrowMessageHandler + Default, F: Fn(&A::Outpu
 
 #[derive(Default)]
 struct EntityDumper {
-    entities: Vec<(EntityId, Vec<SendProp>)>,
+    entities: Vec<(EntityId, (Vec<SendProp>, Vec<SendProp>))>,
 }
 
 impl MessageHandler for EntityDumper {
-    type Output = Vec<(EntityId, Vec<SendProp>)>;
+    type Output = Vec<(EntityId, (Vec<SendProp>, Vec<SendProp>))>;
 
     fn does_handle(message_type: MessageType) -> bool {
         match message_type {
@@ -74,8 +76,10 @@ impl MessageHandler for EntityDumper {
         match message {
             Message::PacketEntities(entity_message) => {
                 for entity in &entity_message.entities {
-                    self.entities
-                        .push((entity.entity_index, entity.props().cloned().collect()));
+                    self.entities.push((
+                        entity.entity_index,
+                        (entity.baseline_props.clone(), entity.props.clone()),
+                    ));
                 }
             }
             _ => {}

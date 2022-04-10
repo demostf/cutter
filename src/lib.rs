@@ -151,11 +151,11 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
             packet.set_tick(original_tick - start_tick);
-            if ty != PacketType::ConsoleCmd {
-                packet
-                    .encode(&mut out_stream, &handler.state_handler)
-                    .unwrap();
-            }
+            // if ty != PacketType::ConsoleCmd {
+            packet
+                .encode(&mut out_stream, &handler.state_handler)
+                .unwrap();
+            // }
             handler.handle_packet(packet).unwrap();
 
             if original_tick >= end_tick {
@@ -163,9 +163,11 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             }
         }
         PacketType::Stop.write(&mut out_stream).unwrap();
-        StopPacket { tick: end_tick }
-            .encode(&mut out_stream, &handler.state_handler)
-            .unwrap();
+        StopPacket {
+            tick: end_tick - start_tick,
+        }
+        .encode(&mut out_stream, &handler.state_handler)
+        .unwrap();
     }
     out_buffer
 }
