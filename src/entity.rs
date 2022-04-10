@@ -16,13 +16,13 @@ impl ActiveEntities {
     pub fn handle_message(&mut self, msg: &PacketEntitiesMessage, state: &ParserState) {
         for entity in &msg.entities {
             if entity.pvs == PVS::Delete || entity.pvs == PVS::Leave {
-                self.entities.remove(&entity.entity_index);
+                self.remove_entity(entity.entity_index);
             } else {
                 self.handle_entity(entity, state);
             }
         }
         for deleted in msg.removed_entities.iter() {
-            self.entities.remove(deleted);
+            self.remove_entity(*deleted);
         }
         if msg.updated_base_line {
             let old_index = msg.base_line as usize;
@@ -37,10 +37,36 @@ impl ActiveEntities {
         }
     }
 
+    fn remove_entity(&mut self, entity_index: EntityId) {
+        self.entities.remove(&entity_index);
+        self.baselines[0].remove(&entity_index);
+        self.baselines[1].remove(&entity_index);
+    }
+
     fn handle_entity(&mut self, entity: &PacketEntity, state: &ParserState) {
         self.entities
             .entry(entity.entity_index)
-            .and_modify(|existing| update_entity(existing, entity, state))
+            .and_modify(|existing| {
+                if existing.serial_number != entity.serial_number {
+                    *existing = entity.clone();
+                    existing.pvs = PVS::Enter;
+                } else {
+                    assert_eq!(
+                        state.server_classes[usize::from(existing.server_class)],
+                        state.server_classes[usize::from(entity.server_class)]
+                    );
+                    for prop in &entity.props {
+                        match existing
+                            .props
+                            .iter_mut()
+                            .find(|existing| existing.index == prop.index)
+                        {
+                            Some(existing) => existing.value = prop.value.clone(),
+                            None => existing.props.push(prop.clone()),
+                        }
+                    }
+                }
+            })
             .or_insert_with(|| entity.clone());
     }
 
@@ -70,27 +96,5 @@ fn encode_entities(mut entities: Vec<PacketEntity>) -> PacketEntitiesMessage {
         delta: None,
         base_line: 0,
         updated_base_line: false,
-    }
-}
-
-fn update_entity(old: &mut PacketEntity, new: &PacketEntity, _state: &ParserState) {
-    if old.serial_number != new.serial_number {
-        *old = new.clone();
-        old.pvs = PVS::Enter;
-    } else {
-        assert_eq!(
-            _state.server_classes[usize::from(old.server_class)],
-            _state.server_classes[usize::from(new.server_class)]
-        );
-        for prop in &new.props {
-            match old
-                .props
-                .iter_mut()
-                .find(|existing| existing.index == prop.index)
-            {
-                Some(existing) => existing.value = prop.value.clone(),
-                None => old.props.push(prop.clone()),
-            }
-        }
     }
 }
