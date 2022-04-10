@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::iter::once;
 use std::mem::replace;
 use tf_demo_parser::demo::message::packetentities::{
-    EntityId, PacketEntitiesMessage, PacketEntity, PVS,
+    EntityId, PacketEntitiesMessage, PacketEntity, UpdateType,
 };
 use tf_demo_parser::ParserState;
 
@@ -15,7 +15,7 @@ pub struct ActiveEntities {
 impl ActiveEntities {
     pub fn handle_message(&mut self, msg: &PacketEntitiesMessage, state: &ParserState) {
         for entity in &msg.entities {
-            if entity.pvs == PVS::Delete || entity.pvs == PVS::Leave {
+            if entity.update_type == UpdateType::Delete || entity.update_type == UpdateType::Leave {
                 self.remove_entity(entity.entity_index);
             } else {
                 self.handle_entity(entity, state);
@@ -30,7 +30,7 @@ impl ActiveEntities {
             self.baselines.swap(0, 1);
 
             for entity in &msg.entities {
-                if entity.pvs == PVS::Enter {
+                if entity.update_type == UpdateType::Enter {
                     self.baselines[new_index].insert(entity.entity_index, entity.clone());
                 }
             }
@@ -48,8 +48,9 @@ impl ActiveEntities {
             .entry(entity.entity_index)
             .and_modify(|existing| {
                 if existing.serial_number != entity.serial_number {
+                    // todo: do baselines need to be cleanup up or updated here?
                     *existing = entity.clone();
-                    existing.pvs = PVS::Enter;
+                    existing.update_type = UpdateType::Enter;
                 } else {
                     assert_eq!(
                         state.server_classes[usize::from(existing.server_class)],
