@@ -25,7 +25,7 @@ use web_sys::console;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 const PRESERVE_PACKETS: &[PacketType] = &[
-    PacketType::Sigon,
+    PacketType::Signon,
     PacketType::DataTables,
     PacketType::StringTables,
     PacketType::SyncTick,
@@ -82,17 +82,16 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             panic!("first packet is not a MessagePacket")
         }
 
-        let msg = entities.encode();
+        let msgs = entities.encode().into_iter().map(Message::PacketEntities);
         let packet = Packet::Message(MessagePacket {
             tick: 0,
-            messages: vec![
-                Message::NetTick(NetTickMessage {
-                    tick: delta_tick,
-                    frame_time: 1881,
-                    std_dev: 263,
-                }),
-                Message::PacketEntities(msg),
-            ],
+            messages: once(Message::NetTick(NetTickMessage {
+                tick: delta_tick,
+                frame_time: 1881,
+                std_dev: 263,
+            }))
+            .chain(msgs)
+            .collect(),
             meta: MessagePacketMeta {
                 flags: 0,
                 view_angles: Default::default(),

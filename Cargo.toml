@@ -2,7 +2,7 @@
 name = "democutter"
 version = "0.1.0"
 authors = ["Robin Appelman <robin@icewind.nl>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["cdylib", "rlib"]
@@ -16,7 +16,7 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 bitbuffer = "0.10"
-tf-demo-parser = { version = "0.3", path = "../tf-demo-parser" }
+tf-demo-parser = { version = "0.4", path = "../tf-demo-parser" }
 wasm-bindgen = "0.2.63"
 web-sys = { version = "0.3", features = ["console"] }
 
@@ -38,5 +38,5 @@ wasm-bindgen-test = "0.3.13"
 
 [profile.release]
 
-[profile.dev.overrides."*"]
+[profile.dev.package."*"]
 opt-level = 3
