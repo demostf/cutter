@@ -9,7 +9,6 @@ use tf_demo_parser::ParserState;
 
 #[derive(Default)]
 pub struct ActiveEntities {
-    baselines: [HashMap<EntityId, PacketEntity>; 2],
     entities: HashMap<EntityId, PacketEntity>,
     max_entities: u16,
 }
@@ -26,30 +25,6 @@ impl ActiveEntities {
         }
         for deleted in msg.removed_entities.iter() {
             self.remove_entity(*deleted);
-        }
-        if msg.updated_base_line {
-            let old_index = msg.base_line as usize;
-            let new_index = 1 - old_index;
-
-            self.baselines[new_index] = self.baselines[old_index].clone();
-
-            for entity in &msg.entities {
-                if entity.update_type == UpdateType::Enter {
-                    let mut entity = match self.baselines[old_index].get(&entity.entity_index) {
-                        Some(baseline)
-                            if baseline.server_class == entity.server_class
-                                && msg.delta.is_some() =>
-                        {
-                            let mut baseline = baseline.clone();
-                            baseline.apply_update(&entity.props);
-                            baseline
-                        }
-                        _ => entity.clone(),
-                    };
-                    entity.baseline_props = vec![];
-                    self.baselines[new_index].insert(entity.entity_index, entity);
-                }
-            }
         }
     }
 
@@ -89,11 +64,17 @@ impl ActiveEntities {
         // baselines in reverse order
         let mut baselines = [
             encode_entities(
-                self.baselines[1].clone().into_values().collect::<Vec<_>>(),
+                state.instance_baselines[1]
+                    .clone()
+                    .into_values()
+                    .collect::<Vec<_>>(),
                 self.max_entities,
             ),
             encode_entities(
-                self.baselines[0].clone().into_values().collect::<Vec<_>>(),
+                state.instance_baselines[0]
+                    .clone()
+                    .into_values()
+                    .collect::<Vec<_>>(),
                 self.max_entities,
             ),
         ];
