@@ -4,18 +4,21 @@ use std::mem::replace;
 use tf_demo_parser::demo::message::packetentities::{
     EntityId, PacketEntitiesMessage, PacketEntity, UpdateType,
 };
+use tf_demo_parser::demo::sendprop::SendPropIdentifier;
 use tf_demo_parser::ParserState;
 
 #[derive(Default)]
 pub struct ActiveEntities {
     baselines: [HashMap<EntityId, PacketEntity>; 2],
     entities: HashMap<EntityId, PacketEntity>,
+    max_entities: u16,
 }
 
 impl ActiveEntities {
     pub fn handle_message(&mut self, msg: &PacketEntitiesMessage, state: &ParserState) {
+        self.max_entities = self.max_entities.max(msg.max_entries);
         for entity in &msg.entities {
-            if entity.update_type == UpdateType::Delete {
+            if entity.update_type == UpdateType::Delete || entity.update_type == UpdateType::Leave {
                 self.remove_entity(entity.entity_index);
             } else {
                 self.handle_entity(entity, state);
@@ -32,14 +35,18 @@ impl ActiveEntities {
 
             for entity in &msg.entities {
                 if entity.update_type == UpdateType::Enter {
-                    let entity = match self.baselines[old_index].get(&entity.entity_index) {
-                        Some(baseline) if baseline.server_class == entity.server_class => {
+                    let mut entity = match self.baselines[old_index].get(&entity.entity_index) {
+                        Some(baseline)
+                            if baseline.server_class == entity.server_class
+                                && msg.delta.is_some() =>
+                        {
                             let mut baseline = baseline.clone();
                             baseline.apply_update(&entity.props);
                             baseline
                         }
                         _ => entity.clone(),
                     };
+                    entity.baseline_props = vec![];
                     self.baselines[new_index].insert(entity.entity_index, entity);
                 }
             }
@@ -48,8 +55,6 @@ impl ActiveEntities {
 
     fn remove_entity(&mut self, entity_index: EntityId) {
         self.entities.remove(&entity_index);
-        self.baselines[0].remove(&entity_index);
-        self.baselines[1].remove(&entity_index);
     }
 
     fn handle_entity(&mut self, entity: &PacketEntity, state: &ParserState) {
@@ -77,40 +82,39 @@ impl ActiveEntities {
             .or_insert_with(|| entity.clone());
     }
 
-    pub fn encode(mut self) -> impl IntoIterator<Item = PacketEntitiesMessage> {
+    pub fn encode(
+        mut self,
+        state: &ParserState,
+    ) -> impl IntoIterator<Item = PacketEntitiesMessage> {
+        // baselines in reverse order
         let mut baselines = [
-            encode_entities(self.baselines[0].clone().into_values().collect::<Vec<_>>()),
-            encode_entities(self.baselines[1].clone().into_values().collect::<Vec<_>>()),
+            encode_entities(
+                self.baselines[1].clone().into_values().collect::<Vec<_>>(),
+                self.max_entities,
+            ),
+            encode_entities(
+                self.baselines[0].clone().into_values().collect::<Vec<_>>(),
+                self.max_entities,
+            ),
         ];
         for entity in self.entities.values_mut() {
             entity.update_type = UpdateType::Enter;
         }
-        let entities = encode_entities(self.entities.into_values().collect::<Vec<_>>());
+        let entities = encode_entities(
+            self.entities.into_values().collect::<Vec<_>>(),
+            self.max_entities,
+        );
 
         baselines[0].updated_base_line = true;
-        baselines[0].base_line = 1; //the baseline that is updated is the other one
-        baselines[1].base_line = 0;
-
-        for ent in baselines[0]
-            .entities
-            .iter()
-            .chain(baselines[1].entities.iter())
-            .chain(entities.entities.iter())
-        {
-            if ent.entity_index == 650 {
-                // dbg!(ent.update_type, &ent.props);
-            }
-        }
-
         baselines[1].updated_base_line = true;
+        baselines[1].base_line = 1;
 
         baselines.into_iter().chain(once(entities))
     }
 }
 
-fn encode_entities(mut entities: Vec<PacketEntity>) -> PacketEntitiesMessage {
+fn encode_entities(mut entities: Vec<PacketEntity>, max_entries: u16) -> PacketEntitiesMessage {
     entities.sort_by(|a, b| a.entity_index.cmp(&b.entity_index));
-    let max_entries = entities.len() as u16;
     PacketEntitiesMessage {
         entities,
         removed_entities: vec![],

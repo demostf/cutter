@@ -49,6 +49,7 @@ fn test_reparse_with_analyser<A: BorrowMessageHandler + Default, F: Fn(&A::Outpu
         if original_tick.tick >= 50000 {
             break;
         }
+        // println!("tick {}", original_tick.tick);
         assert_eq!(original_tick.tick, cut_tick.tick + 30000);
         let original_state = &original_tick.state;
         let cut_state = &cut_tick.state;

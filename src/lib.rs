@@ -16,7 +16,7 @@ use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
 use tf_demo_parser::demo::packet::{Packet, PacketType};
 use tf_demo_parser::demo::parser::{DemoHandler, Encode, NullHandler, RawPacketStream};
-use tf_demo_parser::Demo;
+use tf_demo_parser::{Demo, MessageType};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -82,27 +82,35 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             panic!("first packet is not a MessagePacket")
         }
 
-        let msgs = entities.encode().into_iter().map(Message::PacketEntities);
-        let packet = Packet::Message(MessagePacket {
-            tick: 0,
-            messages: once(Message::NetTick(NetTickMessage {
-                tick: delta_tick,
-                frame_time: 1881,
-                std_dev: 263,
-            }))
-            .chain(msgs)
-            .collect(),
-            meta: MessagePacketMeta {
-                flags: 0,
-                view_angles: Default::default(),
-                sequence_in: 0,
-                sequence_out: 0,
-            },
+        let msgs = entities
+            .encode(&start_handler.state_handler)
+            .into_iter()
+            .map(Message::PacketEntities);
+        let start_packets = msgs.map(|msg| {
+            Packet::Message(MessagePacket {
+                tick: 0,
+                messages: vec![
+                    Message::NetTick(NetTickMessage {
+                        tick: delta_tick,
+                        frame_time: 1881,
+                        std_dev: 263,
+                    }),
+                    msg,
+                ],
+                meta: MessagePacketMeta {
+                    flags: 0,
+                    view_angles: Default::default(),
+                    sequence_in: 0,
+                    sequence_out: 0,
+                },
+            })
         });
-        packet
-            .encode(&mut out_stream, &handler.state_handler)
-            .unwrap();
-        handler.handle_packet(packet).unwrap();
+        for packet in start_packets {
+            packet
+                .encode(&mut out_stream, &handler.state_handler)
+                .unwrap();
+            handler.handle_packet(packet).unwrap();
+        }
 
         // create the net ticks needed for later deltas
         let fill_ticks = ((delta_tick + 1)..=last_server_tick)
@@ -151,11 +159,11 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
             packet.set_tick(original_tick - start_tick);
-            // if ty != PacketType::ConsoleCmd {
-            packet
-                .encode(&mut out_stream, &handler.state_handler)
-                .unwrap();
-            // }
+            if ty != PacketType::ConsoleCmd {
+                packet
+                    .encode(&mut out_stream, &handler.state_handler)
+                    .unwrap();
+            }
             handler.handle_packet(packet).unwrap();
 
             if original_tick >= end_tick {
