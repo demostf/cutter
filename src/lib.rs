@@ -1,9 +1,11 @@
 #![allow(unused_imports)]
 
 mod entity;
+mod string_tables;
 mod utils;
 
 use crate::entity::ActiveEntities;
+use crate::string_tables::StringTablesUpdates;
 use crate::utils::set_panic_hook;
 use bitbuffer::{BitRead, BitWrite, BitWriteStream, LittleEndian};
 use std::cmp::{max, min};
@@ -14,6 +16,7 @@ use tf_demo_parser::demo::message::packetentities::PacketEntitiesMessage;
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
 use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
+use tf_demo_parser::demo::packet::PacketType::StringTables;
 use tf_demo_parser::demo::packet::{Packet, PacketType};
 use tf_demo_parser::demo::parser::{DemoHandler, Encode, NullHandler, RawPacketStream};
 use tf_demo_parser::{Demo, MessageType};
@@ -57,7 +60,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         let mut handler = DemoHandler::default();
         handler.handle_header(&header);
 
-        let (entities, start_packets, last_server_tick) =
+        let (entities, string_tables, start_packets, last_server_tick) =
             skip_start(&mut start_handler, &mut packets, start_tick);
 
         for packet in start_packets {
@@ -79,14 +82,18 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 }
             }
         } else {
-            panic!("first packet is not a MessagePacket")
+            panic!("first packet is not a MessagePacket, pick a different start tick")
         }
 
-        let msgs = entities
+        let string_table_updates = string_tables
+            .encode()
+            .into_iter()
+            .map(|msg| Message::UpdateStringTable(msg));
+        let entity_updates = entities
             .encode(&start_handler.state_handler)
             .into_iter()
             .map(Message::PacketEntities);
-        let start_packets = msgs.map(|msg| {
+        let start_packets = string_table_updates.chain(entity_updates).map(|msg| {
             Packet::Message(MessagePacket {
                 tick: 0,
                 messages: vec![
@@ -184,8 +191,9 @@ fn skip_start<'a>(
     handler: &mut DemoHandler<'a, NullHandler>,
     packets: &mut RawPacketStream<'a>,
     start_tick: u32,
-) -> (ActiveEntities, Vec<Packet<'a>>, u32) {
+) -> (ActiveEntities, StringTablesUpdates, Vec<Packet<'a>>, u32) {
     let mut entities = ActiveEntities::default();
+    let mut string_tables = StringTablesUpdates::default();
     let mut start_packets = Vec::with_capacity(6);
     let mut server_tick = 0;
 
@@ -196,6 +204,7 @@ fn skip_start<'a>(
         } else {
             if let Packet::Message(message_packet) = &packet {
                 for msg in &message_packet.messages {
+                    string_tables.handle_message(&msg);
                     match msg {
                         Message::PacketEntities(msg) => {
                             entities.handle_message(msg, &handler.state_handler);
@@ -216,5 +225,5 @@ fn skip_start<'a>(
         }
     }
 
-    (entities, start_packets, server_tick)
+    (entities, string_tables, start_packets, server_tick)
 }
