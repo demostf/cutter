@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::once;
 use std::mem::replace;
 use tf_demo_parser::demo::message::packetentities::{
@@ -9,7 +9,7 @@ use tf_demo_parser::ParserState;
 
 #[derive(Default)]
 pub struct ActiveEntities {
-    entities: HashMap<EntityId, PacketEntity>,
+    entities: BTreeMap<EntityId, PacketEntity>,
     max_entities: u16,
 }
 
@@ -55,6 +55,10 @@ impl ActiveEntities {
                 }
             })
             .or_insert_with(|| entity.clone());
+    }
+
+    pub fn entity_ids(&self) -> BTreeSet<EntityId> {
+        self.entities.keys().copied().collect()
     }
 
     pub fn encode(

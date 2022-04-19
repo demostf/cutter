@@ -9,10 +9,11 @@ use crate::string_tables::StringTablesUpdates;
 use crate::utils::set_panic_hook;
 use bitbuffer::{BitRead, BitWrite, BitWriteStream, LittleEndian};
 use std::cmp::{max, min};
+use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::iter::once;
 use tf_demo_parser::demo::header::Header;
-use tf_demo_parser::demo::message::packetentities::PacketEntitiesMessage;
+use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntitiesMessage, UpdateType};
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
 use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
@@ -72,18 +73,27 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
 
         let mut next = packets.next(&start_handler.state_handler).unwrap().unwrap();
         let mut delta_tick = 0;
+        let mut max = 0;
+        let mut baseline = 0;
         if let Packet::Message(MessagePacket { messages, .. }) = &next {
             for msg in messages {
                 if let Message::PacketEntities(PacketEntitiesMessage {
-                    delta: Some(delta), ..
+                    delta: Some(delta),
+                    max_entries,
+                    base_line,
+                    ..
                 }) = msg
                 {
+                    max = *max_entries;
+                    baseline = *base_line;
                     delta_tick = delta.get();
                 }
             }
         } else {
             panic!("first packet is not a MessagePacket, pick a different start tick")
         }
+
+        let start_entities = entities.entity_ids();
 
         let string_table_updates = string_tables
             .encode()
@@ -98,7 +108,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 tick: 0,
                 messages: vec![
                     Message::NetTick(NetTickMessage {
-                        tick: delta_tick,
+                        tick: delta_tick - 1,
                         frame_time: 1881,
                         std_dev: 263,
                     }),
@@ -120,15 +130,13 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         }
 
         // create the net ticks needed for later deltas
-        let fill_ticks = ((delta_tick + 1)..=last_server_tick)
-            .into_iter()
-            .map(|tick| {
-                Message::NetTick(NetTickMessage {
-                    tick,
-                    frame_time: 1881,
-                    std_dev: 263,
-                })
-            });
+        let fill_ticks = (delta_tick..=last_server_tick).into_iter().map(|tick| {
+            Message::NetTick(NetTickMessage {
+                tick,
+                frame_time: 1881,
+                std_dev: 263,
+            })
+        });
         let fill_packets = fill_ticks.map(|msg| {
             Packet::Message(MessagePacket {
                 tick: 0,
@@ -137,9 +145,9 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                     Message::PacketEntities(PacketEntitiesMessage {
                         entities: vec![],
                         removed_entities: vec![],
-                        max_entries: 0,
-                        delta: Some(delta_tick.try_into().unwrap()),
-                        base_line: 0,
+                        max_entries: max,
+                        delta: Some((delta_tick - 1).try_into().unwrap()),
+                        base_line: baseline,
                         updated_base_line: false,
                     }),
                 ],
@@ -157,6 +165,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 .unwrap();
         }
 
+        remove_already_deletes(&mut next, &start_entities, last_server_tick);
         next.set_tick(next.tick() - start_tick);
         next.encode(&mut out_stream, &handler.state_handler)
             .unwrap();
@@ -166,6 +175,9 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
             packet.set_tick(original_tick - start_tick);
+
+            remove_already_deletes(&mut packet, &start_entities, last_server_tick);
+
             if ty != PacketType::ConsoleCmd {
                 packet
                     .encode(&mut out_stream, &handler.state_handler)
@@ -226,4 +238,32 @@ fn skip_start<'a>(
     }
 
     (entities, string_tables, start_packets, server_tick)
+}
+
+// filter out any ongoing deletes of entities that don't exist
+fn remove_already_deletes(
+    packet: &mut Packet,
+    current_entities: &BTreeSet<EntityId>,
+    till_delta: u32,
+) {
+    if let Packet::Message(msg_packet) = packet {
+        for msg in &mut msg_packet.messages {
+            if let Message::PacketEntities(msg) = msg {
+                if let Some(delta) = msg.delta {
+                    if delta.get() < till_delta {
+                        let packet_entities = std::mem::take(&mut msg.entities);
+                        msg.entities = packet_entities
+                            .into_iter()
+                            .filter(|ent| match ent.update_type {
+                                UpdateType::Delete | UpdateType::Leave => {
+                                    current_entities.contains(&ent.entity_index)
+                                }
+                                _ => true,
+                            })
+                            .collect();
+                    }
+                }
+            }
+        }
+    }
 }
