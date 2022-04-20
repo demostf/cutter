@@ -12,8 +12,10 @@ use std::cmp::{max, min};
 use std::collections::BTreeSet;
 use std::convert::TryInto;
 use std::iter::once;
+use std::mem::take;
 use tf_demo_parser::demo::header::Header;
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntitiesMessage, UpdateType};
+use tf_demo_parser::demo::message::usermessage::UserMessageType;
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
 use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
@@ -214,6 +216,20 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             packet.set_tick(original_tick - start_tick);
 
             remove_already_deletes(&mut packet, &start_entities, last_server_tick);
+
+            if let Packet::Message(msg_packet) = &mut packet {
+                let messages = take(&mut msg_packet.messages);
+                msg_packet.messages = messages
+                    .into_iter()
+                    .filter(|msg| {
+                        if let Message::UserMessage(usr_msg) = msg {
+                            UserMessageType::CloseCaption != usr_msg.message_type()
+                        } else {
+                            true
+                        }
+                    })
+                    .collect();
+            }
 
             if ty != PacketType::ConsoleCmd {
                 packet
