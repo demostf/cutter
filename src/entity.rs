@@ -78,7 +78,6 @@ impl ActiveEntities {
         state.instance_baselines[0]
             .keys()
             .chain(state.instance_baselines[1].keys())
-            .copied()
             .collect()
     }
 
@@ -113,7 +112,7 @@ impl ActiveEntities {
             ),
         ];
         for entity in self.entities.values_mut() {
-            if state.instance_baselines[0].contains_key(&entity.entity_index) {
+            if state.instance_baselines[0].contains(entity.entity_index) {
                 entity.update_type = UpdateType::Preserve;
             } else {
                 entity.update_type = UpdateType::Enter;

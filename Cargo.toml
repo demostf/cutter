@@ -41,6 +41,7 @@ pretty_assertions = "1.2.1"
 md5 = "0.7.0"
 
 [profile.release]
+lto = true
 
 [profile.dev.package."*"]
 opt-level = 3

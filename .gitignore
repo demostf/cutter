@@ -6,3 +6,5 @@ pkg/
 wasm-pack.log
 out.dem
 test_data/*
+flamegraph.svg
+perf.data*
