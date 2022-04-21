@@ -109,58 +109,17 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         let baseline_updates = baseline_updates.into_iter().map(Message::PacketEntities);
         let start_packets = string_table_updates
             .chain(baseline_updates)
-            .map(|msg| {
-                Packet::Message(MessagePacket {
-                    tick: 0,
-                    messages: vec![
-                        Message::NetTick(NetTickMessage {
-                            tick: delta_tick - 2,
-                            frame_time: 1881,
-                            std_dev: 263,
-                        }),
-                        msg,
-                    ],
-                    meta: MessagePacketMeta {
-                        flags: 0,
-                        view_angles: Default::default(),
-                        sequence_in: 0,
-                        sequence_out: 0,
-                    },
-                })
-            })
+            .map(|msg| msg_packet(vec![net_tick(delta_tick - 2), msg]))
+            .chain(once(msg_packet(vec![
+                net_tick(delta_tick - 1),
+                Message::PacketEntities(entity_update),
+            ])))
             .chain(once(Packet::Message(MessagePacket {
-                tick: 0,
                 messages: vec![
-                    Message::NetTick(NetTickMessage {
-                        tick: delta_tick - 1,
-                        frame_time: 1881,
-                        std_dev: 263,
-                    }),
-                    Message::PacketEntities(entity_update),
-                ],
-                meta: MessagePacketMeta {
-                    flags: 0,
-                    view_angles: Default::default(),
-                    sequence_in: 0,
-                    sequence_out: 0,
-                },
-            })))
-            .chain(once(Packet::Message(MessagePacket {
-                tick: 0,
-                messages: vec![
-                    Message::NetTick(NetTickMessage {
-                        tick: delta_tick,
-                        frame_time: 1881,
-                        std_dev: 263,
-                    }),
+                    net_tick(delta_tick),
                     Message::PacketEntities(removed_update),
                 ],
-                meta: MessagePacketMeta {
-                    flags: 0,
-                    view_angles: Default::default(),
-                    sequence_in: 0,
-                    sequence_out: 0,
-                },
+                ..MessagePacket::default()
             })));
         for packet in start_packets {
             packet
@@ -172,33 +131,19 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         // create the net ticks needed for later deltas
         let fill_ticks = ((delta_tick + 1)..=last_server_tick)
             .into_iter()
-            .map(|tick| {
-                Message::NetTick(NetTickMessage {
-                    tick,
-                    frame_time: 1881,
-                    std_dev: 263,
-                })
-            });
+            .map(|tick| net_tick(tick));
         let fill_packets = fill_ticks.map(|msg| {
             Packet::Message(MessagePacket {
-                tick: 0,
                 messages: vec![
                     msg,
                     Message::PacketEntities(PacketEntitiesMessage {
-                        entities: vec![],
-                        removed_entities: vec![],
                         max_entries: max,
                         delta: Some((delta_tick - 1).try_into().unwrap()),
                         base_line: baseline,
-                        updated_base_line: false,
+                        ..PacketEntitiesMessage::default()
                     }),
                 ],
-                meta: MessagePacketMeta {
-                    flags: 0,
-                    view_angles: Default::default(),
-                    sequence_in: 0,
-                    sequence_out: 0,
-                },
+                ..MessagePacket::default()
             })
         });
         for packet in fill_packets {
@@ -226,12 +171,11 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         handler.handle_packet(next).unwrap();
 
         while let Some(mut packet) = packets.next(&handler.state_handler).unwrap() {
-            let ty = packet.packet_type();
             let original_tick = packet.tick();
 
             mutators.mutate_packet(&mut packet);
 
-            if ty != PacketType::ConsoleCmd {
+            if packet.packet_type() != PacketType::ConsoleCmd {
                 packet
                     .encode(&mut out_stream, &handler.state_handler)
                     .unwrap();
@@ -326,4 +270,19 @@ impl MessageMutator for DeleteFilter {
             }
         }
     }
+}
+
+fn msg_packet(messages: Vec<Message>) -> Packet {
+    Packet::Message(MessagePacket {
+        messages,
+        ..MessagePacket::default()
+    })
+}
+
+fn net_tick(tick: u32) -> Message<'static> {
+    Message::NetTick(NetTickMessage {
+        tick,
+        frame_time: 1881,
+        std_dev: 263,
+    })
 }
