@@ -112,9 +112,7 @@ impl ActiveEntities {
             ),
         ];
         for entity in self.entities.values_mut() {
-            if state.instance_baselines[0].contains(entity.entity_index) {
-                entity.update_type = UpdateType::Preserve;
-            } else {
+            if !state.instance_baselines[0].contains(entity.entity_index) {
                 entity.update_type = UpdateType::Enter;
             }
         }
