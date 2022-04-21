@@ -17,3 +17,19 @@ fn snapshot_gully() {
         expect_file!["../test_data/gully_cut.md5"],
     );
 }
+
+#[test]
+fn snapshot_icewind() {
+    snapshot(
+        "test_data/icewind_85000_90300.dem",
+        expect_file!["../test_data/icewind_85000_90300_cut.md5"],
+    );
+}
+
+#[test]
+fn snapshot_kimo() {
+    snapshot(
+        "test_data/Kimo_8000_100000.dem",
+        expect_file!["../test_data/Kimo_8000_100000_cut.md5"],
+    );
+}
