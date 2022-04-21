@@ -1,10 +1,12 @@
 #![allow(unused_imports)]
 
 mod entity;
+mod mutate;
 mod string_tables;
 mod utils;
 
 use crate::entity::ActiveEntities;
+use crate::mutate::{MutatorList, PacketMutator};
 use crate::string_tables::StringTablesUpdates;
 use crate::utils::set_panic_hook;
 use bitbuffer::{BitRead, BitWrite, BitWriteStream, LittleEndian};
@@ -204,6 +206,15 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 .unwrap();
         }
 
+        let mut mutators = MutatorList::new();
+        mutators.push_message_filter(|message: &Message| {
+            if let Message::UserMessage(usr_message) = message {
+                UserMessageType::CloseCaption != usr_message.message_type()
+            } else {
+                true
+            }
+        });
+
         remove_already_deletes(&mut next, &start_entities, last_server_tick);
         next.set_tick(next.tick() - start_tick);
         next.encode(&mut out_stream, &handler.state_handler)
@@ -217,19 +228,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
 
             remove_already_deletes(&mut packet, &start_entities, last_server_tick);
 
-            if let Packet::Message(msg_packet) = &mut packet {
-                let messages = take(&mut msg_packet.messages);
-                msg_packet.messages = messages
-                    .into_iter()
-                    .filter(|msg| {
-                        if let Message::UserMessage(usr_msg) = msg {
-                            UserMessageType::CloseCaption != usr_msg.message_type()
-                        } else {
-                            true
-                        }
-                    })
-                    .collect();
-            }
+            mutators.mutate_packet(&mut packet);
 
             if ty != PacketType::ConsoleCmd {
                 packet
