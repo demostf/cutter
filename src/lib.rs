@@ -214,9 +214,12 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 true
             }
         });
+        mutators.push_packet_mutator(move |packet: &mut Packet| {
+            packet.set_tick(packet.tick() - start_tick)
+        });
 
         remove_already_deletes(&mut next, &start_entities, last_server_tick);
-        next.set_tick(next.tick() - start_tick);
+        mutators.mutate_packet(&mut next);
         next.encode(&mut out_stream, &handler.state_handler)
             .unwrap();
         handler.handle_packet(next).unwrap();
@@ -224,7 +227,6 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         while let Some(mut packet) = packets.next(&handler.state_handler).unwrap() {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
-            packet.set_tick(original_tick - start_tick);
 
             remove_already_deletes(&mut packet, &start_entities, last_server_tick);
 

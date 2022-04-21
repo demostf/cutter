@@ -15,10 +15,6 @@ pub trait MessageFilter {
     fn filter(&self, message: &Message) -> bool;
 }
 
-pub trait EntityMutator {
-    fn mutate_entity(&self, entity: &mut PacketEntity);
-}
-
 struct PacketMessageMutator<T: MessageMutator> {
     mutator: T,
 }
@@ -34,20 +30,21 @@ impl<T: MessageMutator> PacketMutator for PacketMessageMutator<T> {
     }
 }
 
+impl<F: Fn(&mut Packet)> PacketMutator for F {
+    fn mutate_packet(&self, packet: &mut Packet) {
+        self(packet)
+    }
+}
+
 impl<T: MessageMutator> From<T> for PacketMessageMutator<T> {
     fn from(mutator: T) -> Self {
         PacketMessageMutator { mutator }
     }
 }
 
-impl<T: EntityMutator> MessageMutator for T {
+impl<F: Fn(&mut Message)> MessageMutator for F {
     fn mutate_message(&self, message: &mut Message) {
-        if let Message::PacketEntities(entity_message) = message {
-            entity_message
-                .entities
-                .iter_mut()
-                .for_each(|ent| self.mutate_entity(ent))
-        }
+        self(message)
     }
 }
 
@@ -89,7 +86,11 @@ impl MutatorList {
         Self::default()
     }
 
-    pub fn push_mutator<M: PacketMutator + 'static, T: Into<M>>(&mut self, mutator: T) {
+    pub fn push_packet_mutator<M: PacketMutator + 'static>(&mut self, mutator: M) {
+        self.mutators.push(Box::new(mutator))
+    }
+
+    pub fn push_message_mutator<M: PacketMutator + 'static, T: Into<M>>(&mut self, mutator: T) {
         self.mutators.push(Box::new(mutator.into()))
     }
 
