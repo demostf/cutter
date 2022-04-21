@@ -90,8 +90,9 @@ impl MutatorList {
         self.mutators.push(Box::new(mutator))
     }
 
-    pub fn push_message_mutator<M: PacketMutator + 'static, T: Into<M>>(&mut self, mutator: T) {
-        self.mutators.push(Box::new(mutator.into()))
+    pub fn push_message_mutator<M: MessageMutator + 'static>(&mut self, mutator: M) {
+        self.mutators
+            .push(Box::new(PacketMessageMutator::from(mutator)))
     }
 
     pub fn push_message_filter<M: MessageFilter + 'static>(&mut self, filter: M) {

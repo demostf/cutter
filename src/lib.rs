@@ -6,7 +6,7 @@ mod string_tables;
 mod utils;
 
 use crate::entity::ActiveEntities;
-use crate::mutate::{MutatorList, PacketMutator};
+use crate::mutate::{MessageMutator, MutatorList, PacketMutator};
 use crate::string_tables::StringTablesUpdates;
 use crate::utils::set_panic_hook;
 use bitbuffer::{BitRead, BitWrite, BitWriteStream, LittleEndian};
@@ -16,6 +16,7 @@ use std::convert::TryInto;
 use std::iter::once;
 use std::mem::take;
 use tf_demo_parser::demo::header::Header;
+use tf_demo_parser::demo::message::packetentities::UpdateType::Delete;
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntitiesMessage, UpdateType};
 use tf_demo_parser::demo::message::usermessage::UserMessageType;
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
@@ -214,11 +215,11 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 true
             }
         });
+        mutators.push_message_mutator(DeleteFilter::new(start_entities, last_server_tick));
         mutators.push_packet_mutator(move |packet: &mut Packet| {
             packet.set_tick(packet.tick() - start_tick)
         });
 
-        remove_already_deletes(&mut next, &start_entities, last_server_tick);
         mutators.mutate_packet(&mut next);
         next.encode(&mut out_stream, &handler.state_handler)
             .unwrap();
@@ -227,8 +228,6 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         while let Some(mut packet) = packets.next(&handler.state_handler).unwrap() {
             let ty = packet.packet_type();
             let original_tick = packet.tick();
-
-            remove_already_deletes(&mut packet, &start_entities, last_server_tick);
 
             mutators.mutate_packet(&mut packet);
 
@@ -294,28 +293,35 @@ fn skip_start<'a>(
     (entities, string_tables, start_packets, server_tick)
 }
 
-// filter out any ongoing deletes of entities that don't exist
-fn remove_already_deletes(
-    packet: &mut Packet,
-    current_entities: &BTreeSet<EntityId>,
+struct DeleteFilter {
+    current_entities: BTreeSet<EntityId>,
     till_delta: u32,
-) {
-    if let Packet::Message(msg_packet) = packet {
-        for msg in &mut msg_packet.messages {
-            if let Message::PacketEntities(msg) = msg {
-                if let Some(delta) = msg.delta {
-                    if delta.get() < till_delta {
-                        let packet_entities = std::mem::take(&mut msg.entities);
-                        msg.entities = packet_entities
-                            .into_iter()
-                            .filter(|ent| match ent.update_type {
-                                UpdateType::Delete | UpdateType::Leave => {
-                                    current_entities.contains(&ent.entity_index)
-                                }
-                                _ => true,
-                            })
-                            .collect();
-                    }
+}
+
+impl DeleteFilter {
+    pub fn new(current_entities: BTreeSet<EntityId>, till_delta: u32) -> Self {
+        DeleteFilter {
+            current_entities,
+            till_delta,
+        }
+    }
+}
+
+impl MessageMutator for DeleteFilter {
+    fn mutate_message(&self, message: &mut Message) {
+        if let Message::PacketEntities(message) = message {
+            if let Some(delta) = message.delta {
+                if delta.get() < self.till_delta {
+                    let packet_entities = take(&mut message.entities);
+                    message.entities = packet_entities
+                        .into_iter()
+                        .filter(|ent| match ent.update_type {
+                            UpdateType::Delete | UpdateType::Leave => {
+                                self.current_entities.contains(&ent.entity_index)
+                            }
+                            _ => true,
+                        })
+                        .collect();
                 }
             }
         }
