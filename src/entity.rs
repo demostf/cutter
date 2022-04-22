@@ -112,7 +112,13 @@ impl ActiveEntities {
             ),
         ];
         for entity in self.entities.values_mut() {
-            if !state.instance_baselines[0].contains(entity.entity_index) {
+            if state.instance_baselines[1]
+                .get(entity.entity_index)
+                .filter(|baseline| baseline.server_class == entity.server_class)
+                .is_some()
+            {
+                entity.update_type = UpdateType::Preserve;
+            } else {
                 entity.update_type = UpdateType::Enter;
             }
         }
@@ -150,7 +156,7 @@ impl ActiveEntities {
 
         baselines[0].updated_base_line = true;
         baselines[1].updated_base_line = true;
-        baselines[1].base_line = 1;
+        baselines[0].base_line = 1;
 
         (
             baselines.into_iter(),
