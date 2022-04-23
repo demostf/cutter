@@ -74,28 +74,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 .unwrap();
             handler.handle_packet(packet).unwrap();
         }
-
-        let mut next = packets.next(&start_handler.state_handler).unwrap().unwrap();
-        let mut delta_tick = 0;
-        let mut max = 0;
-        let mut baseline = 0;
-        if let Packet::Message(MessagePacket { messages, .. }) = &next {
-            for msg in messages {
-                if let Message::PacketEntities(PacketEntitiesMessage {
-                    delta: Some(delta),
-                    max_entries,
-                    base_line,
-                    ..
-                }) = msg
-                {
-                    max = *max_entries;
-                    baseline = *base_line;
-                    delta_tick = delta.get();
-                }
-            }
-        } else {
-            panic!("first packet is not a MessagePacket, pick a different start tick")
-        }
+        let delta_tick = start_state.last_delta;
 
         let start_entities = start_state.entities.entity_ids();
 
@@ -138,9 +117,8 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 messages: vec![
                     msg,
                     Message::PacketEntities(PacketEntitiesMessage {
-                        max_entries: max,
+                        max_entries: start_state.entity_max,
                         delta: Some((delta_tick - 1).try_into().unwrap()),
-                        base_line: baseline,
                         ..PacketEntitiesMessage::default()
                     }),
                 ],
@@ -165,11 +143,6 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         mutators.push_packet_mutator(move |packet: &mut Packet| {
             packet.set_tick(packet.tick() - start_tick)
         });
-
-        mutators.mutate_packet(&mut next);
-        next.encode(&mut out_stream, &handler.state_handler)
-            .unwrap();
-        handler.handle_packet(next).unwrap();
 
         while let Some(mut packet) = packets.next(&handler.state_handler).unwrap() {
             let original_tick = packet.tick();
@@ -202,6 +175,8 @@ struct StartState<'a> {
     table_updates: StringTablesUpdates,
     start_packets: Vec<Packet<'a>>,
     server_tick: u32,
+    entity_max: u16,
+    last_delta: u32,
 }
 
 fn skip_start<'a>(
@@ -213,6 +188,8 @@ fn skip_start<'a>(
     let mut table_updates = StringTablesUpdates::default();
     let mut start_packets = Vec::with_capacity(6);
     let mut server_tick = 0;
+    let mut entity_max = 0;
+    let mut last_delta = 0;
 
     while let Some(packet) = packets.next(&handler.state_handler).unwrap() {
         if PRESERVE_PACKETS.contains(&packet.packet_type()) {
@@ -224,6 +201,10 @@ fn skip_start<'a>(
                     table_updates.handle_message(&msg);
                     match msg {
                         Message::PacketEntities(msg) => {
+                            if let Some(delta) = msg.delta {
+                                last_delta = delta.get();
+                            }
+                            entity_max = msg.max_entries;
                             entities.handle_message(msg, &handler.state_handler);
                         }
                         Message::NetTick(NetTickMessage { tick, .. }) => {
@@ -247,6 +228,8 @@ fn skip_start<'a>(
         table_updates,
         start_packets,
         server_tick,
+        entity_max,
+        last_delta,
     }
 }
 
