@@ -66,10 +66,9 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         let mut handler = DemoHandler::default();
         handler.handle_header(&header);
 
-        let (entities, string_tables, start_packets, last_server_tick) =
-            skip_start(&mut start_handler, &mut packets, start_tick);
+        let start_state = skip_start(&mut start_handler, &mut packets, start_tick);
 
-        for packet in start_packets {
+        for packet in start_state.start_packets {
             packet
                 .encode(&mut out_stream, &handler.state_handler)
                 .unwrap();
@@ -98,14 +97,16 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
             panic!("first packet is not a MessagePacket, pick a different start tick")
         }
 
-        let start_entities = entities.entity_ids();
+        let start_entities = start_state.entities.entity_ids();
 
-        let string_table_updates = string_tables
+        let string_table_updates = start_state
+            .table_updates
             .encode()
             .into_iter()
             .map(|msg| Message::UpdateStringTable(msg));
-        let (baseline_updates, entity_update, removed_update) =
-            entities.encode(&start_handler.state_handler, delta_tick - 2);
+        let (baseline_updates, entity_update, removed_update) = start_state
+            .entities
+            .encode(&start_handler.state_handler, delta_tick - 2);
         let baseline_updates = baseline_updates.into_iter().map(Message::PacketEntities);
         let start_packets = string_table_updates
             .chain(baseline_updates)
@@ -129,7 +130,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
         }
 
         // create the net ticks needed for later deltas
-        let fill_ticks = ((delta_tick + 1)..=last_server_tick)
+        let fill_ticks = ((delta_tick + 1)..=start_state.server_tick)
             .into_iter()
             .map(|tick| net_tick(tick));
         let fill_packets = fill_ticks.map(|msg| {
@@ -160,7 +161,7 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
                 true
             }
         });
-        mutators.push_message_mutator(DeleteFilter::new(start_entities, last_server_tick));
+        mutators.push_message_mutator(DeleteFilter::new(start_entities, start_state.server_tick));
         mutators.push_packet_mutator(move |packet: &mut Packet| {
             packet.set_tick(packet.tick() - start_tick)
         });
@@ -196,13 +197,20 @@ pub fn cut(input: &[u8], start_tick: u32, end_tick: u32) -> Vec<u8> {
     out_buffer
 }
 
+struct StartState<'a> {
+    entities: ActiveEntities,
+    table_updates: StringTablesUpdates,
+    start_packets: Vec<Packet<'a>>,
+    server_tick: u32,
+}
+
 fn skip_start<'a>(
     handler: &mut DemoHandler<'a, NullHandler>,
     packets: &mut RawPacketStream<'a>,
     start_tick: u32,
-) -> (ActiveEntities, StringTablesUpdates, Vec<Packet<'a>>, u32) {
+) -> StartState<'a> {
     let mut entities = ActiveEntities::default();
-    let mut string_tables = StringTablesUpdates::default();
+    let mut table_updates = StringTablesUpdates::default();
     let mut start_packets = Vec::with_capacity(6);
     let mut server_tick = 0;
 
@@ -213,7 +221,7 @@ fn skip_start<'a>(
         } else {
             if let Packet::Message(message_packet) = &packet {
                 for msg in &message_packet.messages {
-                    string_tables.handle_message(&msg);
+                    table_updates.handle_message(&msg);
                     match msg {
                         Message::PacketEntities(msg) => {
                             entities.handle_message(msg, &handler.state_handler);
@@ -234,7 +242,12 @@ fn skip_start<'a>(
         }
     }
 
-    (entities, string_tables, start_packets, server_tick)
+    StartState {
+        entities,
+        table_updates,
+        start_packets,
+        server_tick,
+    }
 }
 
 struct DeleteFilter {
