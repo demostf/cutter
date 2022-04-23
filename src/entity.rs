@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::iter::once;
-use std::mem::replace;
+use std::mem::{replace, take};
 use std::num::NonZeroU32;
 use tf_demo_parser::demo::message::packetentities::{
     EntityId, PacketEntitiesMessage, PacketEntity, UpdateType,
@@ -52,9 +52,8 @@ impl ActiveEntities {
                 if existing.serial_number != entity.serial_number
                     && existing.server_class != entity.server_class
                 {
-                    // todo: do baselines need to be cleanup up or updated here?
                     *existing = entity.clone();
-                    existing.update_type = UpdateType::Enter;
+                    existing.apply_update(&entity.props);
                 } else {
                     debug_assert_eq!(
                         state.server_classes[usize::from(existing.server_class)],
@@ -112,14 +111,20 @@ impl ActiveEntities {
             ),
         ];
         for entity in self.entities.values_mut() {
-            if state.instance_baselines[1]
-                .get(entity.entity_index)
-                .filter(|baseline| baseline.server_class == entity.server_class)
-                .is_some()
-            {
-                entity.update_type = UpdateType::Preserve;
-            } else {
-                entity.update_type = UpdateType::Enter;
+            match state.instance_baselines[1].get(entity.entity_index) {
+                Some(baseline_entity) if baseline_entity.server_class == entity.server_class => {
+                    entity.update_type = UpdateType::Preserve;
+                }
+                Some(_baseline_entity) => {
+                    // encode the baseline if the baseline server class differs
+                    let props = take(&mut entity.props);
+                    entity.props = take(&mut entity.baseline_props);
+                    entity.apply_update(&props);
+                    entity.update_type = UpdateType::Enter;
+                }
+                None => {
+                    entity.update_type = UpdateType::Enter;
+                }
             }
         }
 
