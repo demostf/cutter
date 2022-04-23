@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>POV demo camera unlocker</title>
+  <title>Demo cutter</title>
   <style>
     input[disabled] {
       opacity: 0.5;
@@ -12,11 +12,11 @@
 <body>
 <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
 <script src="./bootstrap.js"></script>
-<h1>POV demo camera unlocker</h1>
+<h1>TF2 Demo cutter</h1>
 
-Unlocks the camera in POV demos to allow the same controls as when viewing STV demos.
+Cut down a demo file to a specific tick range.
 
-<p>Select a demo file below to begin processing, once processed the file will be presented as download</p>
+<p>Set the start and end tick and select a demo file below to begin processing, once processed the file will be presented as download</p>
 <p>Processing demo files can take a while</p>
 <form>
   <input type="number" id="start" value="30000">
@@ -28,9 +28,7 @@ Unlocks the camera in POV demos to allow the same controls as when viewing STV d
   Note:
 </p>
 <ul>
-  <li>The demo still being recorded as POV demo means that only data around the recording player is in the demo file, players not near the recorder will behave weirdly</li>
-  <li>When the player respawns the freecam camera will be moved</li>
-  <li>The resulting demo might not work or crash tf2 on playback in rare cases</li>
+  <li>The resulting demo might not work or crash tf2 on playback, blame valve for making bad code</li>
 </ul>
 </body>
 </html>
