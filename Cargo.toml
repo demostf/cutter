@@ -16,7 +16,8 @@ default = ["console_error_panic_hook"]
 
 [dependencies]
 bitbuffer = "0.10"
-tf-demo-parser = { version = "0.4", path = "../tf-demo-parser" }
+tf-demo-parser = { version = "0.4", git = "https://github.com/demostf/parser" }
+#tf-demo-parser = { version = "0.4", path = "../tf-demo-parser" }
 wasm-bindgen = "0.2.63"
 web-sys = { version = "0.3", features = ["console"] }
 
