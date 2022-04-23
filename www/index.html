@@ -1,13 +1,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8">
-  <title>Demo cutter</title>
-  <style>
-    input[disabled] {
-      opacity: 0.5;
-    }
-  </style>
+    <meta charset="utf-8">
+    <title>Demo cutter</title>
+    <style>
+        input[disabled] {
+            opacity: 0.5;
+        }
+    </style>
 </head>
 <body>
 <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
@@ -16,19 +16,25 @@
 
 Cut down a demo file to a specific tick range.
 
-<p>Set the start and end tick and select a demo file below to begin processing, once processed the file will be presented as download</p>
+<p>
+    Set the start and end tick, select a demo file and press the cut button to begin processing, once processed the file
+    will be presented as download
+</p>
 <p>Processing demo files can take a while</p>
 <form>
-  <input type="number" id="start" value="30000">
-  <input type="number" id="end" value="50000">
-  <input type="file" id="file">
+    <p>
+        <input type="number" id="start" value="30000">
+        <input type="number" id="end" value="50000">
+        <input type="file" id="file">
+    </p>
+    <p><input type="button" id="cut" value="Cut demo"></p>
 </form>
 
 <p>
-  Note:
+    Note:
 </p>
 <ul>
-  <li>The resulting demo might not work or crash tf2 on playback, blame valve for making bad code</li>
+    <li>The resulting demo might not work or crash tf2 on playback, blame valve for making bad code</li>
 </ul>
 </body>
 </html>

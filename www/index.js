@@ -4,7 +4,11 @@ import {cut} from "democutter";
 let fileSelect = document.getElementById('file');
 let startInput = document.getElementById('start');
 let endInput = document.getElementById('end');
-fileSelect.addEventListener('change', (event) => {
+let cutButton = document.getElementById('cut');
+
+let outputName = "cut.dem";
+
+cutButton.addEventListener('click', (event) => {
     let start = parseInt(startInput.value);
     let end = parseInt(endInput.value);
     console.log(start, end);
@@ -15,8 +19,23 @@ fileSelect.addEventListener('change', (event) => {
         console.log(reader.result);
         let result = cut(new Uint8Array(reader.result), start, end);
         fileSelect.disabled = false;
-        save(result, "cut.dem");
+        save(result, outputName);
     });
+});
+
+
+fileSelect.addEventListener('change', (event) => {
+    const tickRate = 66;
+    let name = fileSelect.files[0].name;
+    let match = name.match(/^([^_]+)_(\d+)\.dem$/);
+    if (match) {
+        let highlightTick = parseInt(match[2]);
+        startInput.value = highlightTick - tickRate * 10;
+        endInput.value = highlightTick + tickRate * 5 * 60;
+        outputName = `${match[1]}_${tickRate * 10}.dem`;
+    } else {
+        outputName = name.replace(/\.dem/, "_cut.dem");
+    }
 });
 
 function save(data, fileName) {
