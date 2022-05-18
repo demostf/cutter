@@ -1,11 +1,13 @@
 #![allow(unused_imports)]
 
 mod entity;
+mod highlight;
 mod mutate;
 mod string_tables;
 mod utils;
 
 use crate::entity::ActiveEntities;
+use crate::highlight::{Highlight, HighlightAnalyser};
 use crate::mutate::{MessageMutator, MutatorList, PacketMutator};
 use crate::string_tables::StringTablesUpdates;
 use crate::utils::set_panic_hook;
@@ -16,16 +18,14 @@ use std::convert::TryInto;
 use std::iter::once;
 use std::mem::take;
 use tf_demo_parser::demo::header::Header;
-use tf_demo_parser::demo::message::packetentities::UpdateType::Delete;
 use tf_demo_parser::demo::message::packetentities::{EntityId, PacketEntitiesMessage, UpdateType};
-use tf_demo_parser::demo::message::usermessage::UserMessageType;
+use tf_demo_parser::demo::message::usermessage::{UserMessage, UserMessageType};
 use tf_demo_parser::demo::message::{Message, NetTickMessage};
 use tf_demo_parser::demo::packet::message::{MessagePacket, MessagePacketMeta};
 use tf_demo_parser::demo::packet::stop::StopPacket;
-use tf_demo_parser::demo::packet::PacketType::StringTables;
 use tf_demo_parser::demo::packet::{Packet, PacketType};
 use tf_demo_parser::demo::parser::{DemoHandler, Encode, NullHandler, RawPacketStream};
-use tf_demo_parser::{Demo, MessageType};
+use tf_demo_parser::{Demo, DemoParser, MessageType};
 use wasm_bindgen::prelude::*;
 use web_sys::console;
 
@@ -281,4 +281,11 @@ fn net_tick(tick: u32) -> Message<'static> {
         frame_time: 1881,
         std_dev: 263,
     })
+}
+
+pub fn bookmarks(input: &[u8]) -> Vec<Highlight> {
+    let demo = Demo::new(&input);
+    let parser = DemoParser::new_with_analyser(demo.get_stream(), HighlightAnalyser::default());
+    let (_, highlights) = parser.parse().unwrap();
+    highlights
 }
