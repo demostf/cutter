@@ -195,7 +195,7 @@ fn skip_start<'a>(
         if PRESERVE_PACKETS.contains(&packet.packet_type()) {
             start_packets.push(packet.clone());
             handler.handle_packet(packet).unwrap();
-        } else {
+        } else if packet.packet_type() != PacketType::ConsoleCmd {
             if let Packet::Message(message_packet) = &packet {
                 for msg in &message_packet.messages {
                     table_updates.handle_message(&msg);
