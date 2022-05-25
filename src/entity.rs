@@ -111,7 +111,7 @@ impl ActiveEntities {
             ),
         ];
         for entity in self.entities.values_mut() {
-            match state.instance_baselines[1].get(entity.entity_index) {
+            match state.instance_baselines[0].get(entity.entity_index) {
                 Some(baseline_entity) if baseline_entity.server_class == entity.server_class => {
                     entity.update_type = UpdateType::Preserve;
                 }
