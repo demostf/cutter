@@ -30,7 +30,7 @@ fileSelect.addEventListener('change', (event) => {
     let match = name.match(/^([^_]+)_(\d+)\.dem$/);
     if (match) {
         let highlightTick = parseInt(match[2]);
-        startInput.value = highlightTick - tickRate * 10;
+        startInput.value = highlightTick;
         endInput.value = highlightTick + tickRate * 5 * 60;
         outputName = `${match[1]}_${tickRate * 10}.dem`;
     } else {
