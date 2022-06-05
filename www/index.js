@@ -32,7 +32,7 @@ fileSelect.addEventListener('change', (event) => {
         let highlightTick = parseInt(match[2]);
         startInput.value = highlightTick;
         endInput.value = highlightTick + tickRate * 5 * 60;
-        outputName = `${match[1]}_${tickRate * 10}.dem`;
+        outputName = `${match[1]}_cut.dem`;
     } else {
         outputName = name.replace(/\.dem/, "_cut.dem");
     }
